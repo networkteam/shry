@@ -41,6 +41,8 @@ type Component struct {
 	Variables map[string]any `yaml:"variables,omitempty"`
 	// Files to copy when adding the component to a project
 	Files []File `yaml:"files"`
+	// Optional list of component dependencies
+	Dependencies []string `yaml:"dependencies,omitempty"`
 }
 
 // File represents a file to be copied when adding a component

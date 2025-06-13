@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -143,135 +144,9 @@ func main() {
 
 				componentName := c.Args().First()
 
-				// Resolve component and verify variables
-				component, err := reg.ResolveComponent(projectConfig.Platform, componentName)
+				err = addComponent(projectConfig, reg, componentName, nil)
 				if err != nil {
 					return err
-				}
-
-				// Resolve files and verify variables
-				resolvedFiles, err := component.ResolveFiles(projectConfig.Variables)
-				if err != nil {
-					return err
-				}
-
-				// Add the component
-				fmt.Printf("Adding component %s...\n", componentName)
-				for _, file := range resolvedFiles {
-
-					// Read source file
-					srcPath := filepath.Join(component.Path, file.Src)
-					srcContent, err := reg.ReadFile(srcPath)
-					if err != nil {
-						return fmt.Errorf("reading source file %s: %w", srcPath, err)
-					}
-
-					// Substitute variables in content
-					newContent, err := template.Resolve(string(srcContent), projectConfig.Variables)
-					if err != nil {
-						return fmt.Errorf("resolving variables in content: %w", err)
-					}
-
-					// Check for existing files
-					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
-					if _, err := os.Stat(dstPath); err == nil {
-						existingContent, err := os.ReadFile(dstPath)
-						if err != nil {
-							return fmt.Errorf("reading existing file: %w", err)
-						}
-
-						dmp := diffmatchpatch.New()
-						diffs := dmp.DiffMain(string(existingContent), newContent, false)
-
-						// Only show if there are actual changes
-						hasChanges := false
-						for _, diff := range diffs {
-							if diff.Type != diffmatchpatch.DiffEqual {
-								hasChanges = true
-								break
-							}
-						}
-
-						if !hasChanges {
-							fmt.Printf("  Unchanged %s\n", file.Dst)
-							continue
-						}
-
-						var choice string
-						err = huh.NewForm(
-							huh.NewGroup(
-								huh.NewSelect[string]().
-									Title(fmt.Sprintf("File already exists: %s", file.Dst)).
-									Options(
-										huh.NewOption("Skip", "skip"),
-										huh.NewOption("Overwrite", "overwrite"),
-										huh.NewOption("Diff", "diff"),
-									).
-									Value(&choice),
-							),
-						).Run()
-						if err != nil {
-							return err
-						}
-
-						if choice == "skip" {
-							fmt.Printf("  Skipped %s\n", file.Dst)
-							continue
-						}
-						if choice == "diff" {
-							patches := dmp.PatchMake(string(existingContent), diffs)
-
-							fmt.Println("\nDiff:")
-							fmt.Println(dmp.PatchToText(patches))
-
-							var choice string
-							err = huh.NewForm(
-								huh.NewGroup(
-									huh.NewSelect[string]().
-										Title(fmt.Sprintf("File already exists: %s", file.Dst)).
-										Options(
-											huh.NewOption("Skip", "skip"),
-											huh.NewOption("Overwrite", "overwrite"),
-										).
-										Value(&choice),
-								),
-							).Run()
-							if err != nil {
-								return err
-							}
-
-							if choice == "skip" {
-								fmt.Printf("  Skipped %s\n", file.Dst)
-								continue
-							}
-
-							if choice == "overwrite" {
-								// Write destination file
-								if err := os.WriteFile(dstPath, []byte(newContent), 0644); err != nil {
-									return fmt.Errorf("writing destination file: %w", err)
-								}
-
-								fmt.Printf("  Overwrite %s\n", file.Dst)
-
-								continue
-							}
-						}
-
-						// FIXME Check if this is reachable at all
-						return fmt.Errorf("destination file already exists: %s", dstPath)
-					}
-
-					// Create destination directory if needed
-					if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
-						return fmt.Errorf("creating destination directory: %w", err)
-					}
-
-					// Write destination file
-					if err := os.WriteFile(dstPath, []byte(newContent), 0644); err != nil {
-						return fmt.Errorf("writing destination file: %w", err)
-					}
-
-					fmt.Printf("  Added %s\n", file.Dst)
 				}
 
 				return nil
@@ -736,4 +611,157 @@ func loadProjectAndRegistry(c *cli.Context) (*config.ProjectConfig, *registry.Re
 	}
 
 	return projectConfig, reg, nil
+}
+
+func addComponent(projectConfig *config.ProjectConfig, reg *registry.Registry, componentName string, addedComponents []string) error {
+	// Skip if already added
+	if slices.Contains(addedComponents, componentName) {
+		return nil
+	}
+
+	// Resolve component and verify variables
+	component, err := reg.ResolveComponent(projectConfig.Platform, componentName)
+	if err != nil {
+		return err
+	}
+
+	// Resolve files and verify variables
+	resolvedFiles, err := component.ResolveFiles(projectConfig.Variables)
+	if err != nil {
+		return err
+	}
+
+	componentType := "component"
+	if len(addedComponents) > 0 {
+		componentType = "dependency"
+	}
+
+	// Add the component
+	fmt.Printf("Adding %s %s...\n", componentType, componentName)
+	for _, file := range resolvedFiles {
+		// Read source file
+		srcPath := filepath.Join(component.Path, file.Src)
+		srcContent, err := reg.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("reading source file %s: %w", srcPath, err)
+		}
+
+		// Substitute variables in content
+		newContent, err := template.Resolve(string(srcContent), projectConfig.Variables)
+		if err != nil {
+			return fmt.Errorf("resolving variables in content: %w", err)
+		}
+
+		// Check for existing files
+		dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
+		if _, err := os.Stat(dstPath); err == nil {
+			existingContent, err := os.ReadFile(dstPath)
+			if err != nil {
+				return fmt.Errorf("reading existing file: %w", err)
+			}
+
+			dmp := diffmatchpatch.New()
+			diffs := dmp.DiffMain(string(existingContent), newContent, false)
+
+			// Only show if there are actual changes
+			hasChanges := false
+			for _, diff := range diffs {
+				if diff.Type != diffmatchpatch.DiffEqual {
+					hasChanges = true
+					break
+				}
+			}
+
+			if !hasChanges {
+				fmt.Printf("  Unchanged %s\n", file.Dst)
+				continue
+			}
+
+			var choice string
+			err = huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Title(fmt.Sprintf("File already exists: %s", file.Dst)).
+						Options(
+							huh.NewOption("Skip", "skip"),
+							huh.NewOption("Overwrite", "overwrite"),
+							huh.NewOption("Diff", "diff"),
+						).
+						Value(&choice),
+				),
+			).Run()
+			if err != nil {
+				return err
+			}
+
+			if choice == "skip" {
+				fmt.Printf("  Skipped %s\n", file.Dst)
+				continue
+			}
+			if choice == "diff" {
+				patches := dmp.PatchMake(string(existingContent), diffs)
+
+				fmt.Println("\nDiff:")
+				fmt.Println(dmp.PatchToText(patches))
+
+				var choice string
+				err = huh.NewForm(
+					huh.NewGroup(
+						huh.NewSelect[string]().
+							Title(fmt.Sprintf("File already exists: %s", file.Dst)).
+							Options(
+								huh.NewOption("Skip", "skip"),
+								huh.NewOption("Overwrite", "overwrite"),
+							).
+							Value(&choice),
+					),
+				).Run()
+				if err != nil {
+					return err
+				}
+
+				if choice == "skip" {
+					fmt.Printf("  Skipped %s\n", file.Dst)
+					continue
+				}
+
+				if choice == "overwrite" {
+					// Write destination file
+					if err := os.WriteFile(dstPath, []byte(newContent), 0644); err != nil {
+						return fmt.Errorf("writing destination file: %w", err)
+					}
+
+					fmt.Printf("  Overwrite %s\n", file.Dst)
+
+					continue
+				}
+			}
+
+			// FIXME Check if this is reachable at all
+			return fmt.Errorf("destination file already exists: %s", dstPath)
+		}
+
+		// Create destination directory if needed
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+			return fmt.Errorf("creating destination directory: %w", err)
+		}
+
+		// Write destination file
+		if err := os.WriteFile(dstPath, []byte(newContent), 0644); err != nil {
+			return fmt.Errorf("writing destination file: %w", err)
+		}
+
+		fmt.Printf("  Added %s\n", file.Dst)
+	}
+
+	addedComponents = append(addedComponents, componentName)
+
+	for _, dependency := range component.Dependencies {
+		err = addComponent(projectConfig, reg, dependency, addedComponents)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
