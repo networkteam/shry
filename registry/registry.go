@@ -43,3 +43,26 @@ func (r *Registry) ReadFile(path string) ([]byte, error) {
 func (r *Registry) ScanComponents() (map[string]map[string]*config.Component, error) {
 	return config.ScanComponents(r.fs, ".")
 }
+
+// ResolveComponent resolves a component by name for the given platform and verifies its variables
+func (r *Registry) ResolveComponent(platform, name string) (*config.Component, error) {
+	// Scan components
+	components, err := r.ScanComponents()
+	if err != nil {
+		return nil, fmt.Errorf("scanning components: %w", err)
+	}
+
+	// Lookup platform components
+	platformComponents, exists := components[platform]
+	if !exists {
+		return nil, fmt.Errorf("no components found for platform %s", platform)
+	}
+
+	// Lookup component
+	component, exists := platformComponents[name]
+	if !exists {
+		return nil, fmt.Errorf("component %s not found for platform %s", name, platform)
+	}
+
+	return component, nil
+}

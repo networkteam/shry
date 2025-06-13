@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,25 +10,28 @@ import (
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-billy/v5/osfs"
 	"github.com/go-git/go-git/v5"
+	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/protocol/packp/sideband"
 	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/networkteam/shry/config"
 )
 
 // Cache manages a local cache of Git registry clones and local directories
 type Cache struct {
 	// Base directory for all registry clones
 	baseDir string
+	// Global configuration for authentication
+	globalConfig *config.GlobalConfig
+	// Verbose mode
+	Verbose bool
 }
 
 // NewCache creates a new Cache instance with the given base directory
-func NewCache(baseDir string) (*Cache, error) {
-	// Ensure the base directory exists
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create cache directory: %w", err)
-	}
-
+func NewCache(baseDir string, globalConfig *config.GlobalConfig) (*Cache, error) {
 	return &Cache{
-		baseDir: baseDir,
+		baseDir:      baseDir,
+		globalConfig: globalConfig,
 	}, nil
 }
 
@@ -52,6 +56,17 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 	dirName := strings.ReplaceAll(url, "/", "_")
 	repoPath := filepath.Join(c.baseDir, dirName)
 
+	// Get authentication method
+	auth, err := c.globalConfig.GetAuth(url)
+	if err != nil {
+		return nil, fmt.Errorf("getting auth: %w", err)
+	}
+
+	var progress sideband.Progress
+	if c.Verbose {
+		progress = os.Stderr
+	}
+
 	// Check if repository already exists
 	bareRepo, err := git.PlainOpen(repoPath)
 	if err == nil {
@@ -61,14 +76,25 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 			return nil, fmt.Errorf("failed to get remote: %w", err)
 		}
 
-		if err := remote.Fetch(&git.FetchOptions{}); err != nil && err != git.NoErrAlreadyUpToDate {
+		if err := remote.Fetch(&git.FetchOptions{
+			Auth:     auth,
+			Progress: progress,
+			RefSpecs: []gitconfig.RefSpec{"+refs/heads/*:refs/heads/*"},
+			Prune:    true,
+		}); err != nil && err != git.NoErrAlreadyUpToDate {
 			return nil, fmt.Errorf("failed to fetch latest changes: %w", err)
 		}
+		slog.Debug("Updated cache repository", "url", url, "ref", ref)
 	} else if err == git.ErrRepositoryNotExists {
+		var progress sideband.Progress
+		if c.Verbose {
+			progress = os.Stderr
+		}
 		// Clone the repository as bare
 		bareRepo, err = git.PlainClone(repoPath, true, &git.CloneOptions{
 			URL:      fmt.Sprintf("https://%s", url),
-			Progress: os.Stdout,
+			Progress: progress,
+			Auth:     auth,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to clone repository: %w", err)
@@ -96,10 +122,13 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 		SingleBranch:  true,
 		Depth:         1,
 		ReferenceName: referenceName,
+		Progress:      progress,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to clone repository: %w", err)
 	}
+
+	slog.Debug("Cloned cache repository to in-memory worktree", "url", url, "ref", ref, "referenceName", referenceName)
 
 	return newRegistry(repo, fs), nil
 }

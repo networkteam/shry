@@ -135,8 +135,8 @@ func ScanComponents(fs billy.Filesystem, path string) (map[string]map[string]*Co
 	return components, nil
 }
 
-// ResolveVariables resolves all variables in the component's files
-func (c *Component) ResolveVariables(variables map[string]any) ([]File, error) {
+// ResolveFiles resolves all variables in the component's files
+func (c *Component) ResolveFiles(variables map[string]any) ([]File, error) {
 	var resolvedFiles []File
 
 	// Collect all variables from file paths and content

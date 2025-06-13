@@ -1,4 +1,5 @@
-registry: ../registry
+# registry: ../registry
+registry: gitlab.networkteam.com/networkteam/shry-registry
 platform: neos
 
 variables:

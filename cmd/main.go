@@ -29,6 +29,18 @@ func main() {
 			Value:   filepath.Join(home, ".cache", "shry"),
 			EnvVars: []string{"SHRY_CACHE_DIR"},
 		},
+		&cli.StringFlag{
+			Name:    "global-config",
+			Usage:   "Global config path",
+			Value:   filepath.Join(home, ".config", "shry", config.GlobalConfigFile),
+			EnvVars: []string{"SHRY_GLOBAL_CONFIG"},
+		},
+		&cli.BoolFlag{
+			Name:    "verbose",
+			Usage:   "Verbose mode",
+			Aliases: []string{"v"},
+			EnvVars: []string{"SHRY_VERBOSE"},
+		},
 	}
 	app.Commands = []*cli.Command{
 		{
@@ -57,11 +69,18 @@ func main() {
 					ref = parts[1]
 				}
 
+				// Load global configuration
+				globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
+				if err != nil {
+					return fmt.Errorf("loading global config: %w", err)
+				}
+
 				// Create cache
-				cache, err := registry.NewCache(c.String("cache-dir"))
+				cache, err := registry.NewCache(c.String("cache-dir"), globalConfig)
 				if err != nil {
 					return fmt.Errorf("failed to create cache: %w", err)
 				}
+				cache.Verbose = c.Bool("verbose")
 
 				// Get current directory as project root
 				cwd, err := os.Getwd()
@@ -103,40 +122,29 @@ func main() {
 					return err
 				}
 
-				// Scan components
-				components, err := reg.ScanComponents()
-				if err != nil {
-					return fmt.Errorf("scanning components: %w", err)
-				}
-
-				// Lookup the component
 				componentName := c.Args().First()
-				platformComponents, exists := components[projectConfig.Platform]
-				if !exists {
-					return fmt.Errorf("no components found for platform %s", projectConfig.Platform)
-				}
-				component, exists := platformComponents[componentName]
-				if !exists {
-					return fmt.Errorf("component %s not found for platform %s", componentName, projectConfig.Platform)
-				}
 
-				// Verify variables
-				resolvedFiles, err := component.ResolveVariables(projectConfig.Variables)
+				// Resolve component and verify variables
+				component, err := reg.ResolveComponent(projectConfig.Platform, componentName)
 				if err != nil {
 					return err
 				}
 
-				// Check for existing files
-				for _, file := range resolvedFiles {
-					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
-					if _, err := os.Stat(dstPath); err == nil {
-						return fmt.Errorf("destination file already exists: %s", dstPath)
-					}
+				// Resolve files and verify variables
+				resolvedFiles, err := component.ResolveFiles(projectConfig.Variables)
+				if err != nil {
+					return err
 				}
 
 				// Add the component
 				fmt.Printf("Adding component %s...\n", componentName)
 				for _, file := range resolvedFiles {
+					// Check for existing files
+					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
+					if _, err := os.Stat(dstPath); err == nil {
+						return fmt.Errorf("destination file already exists: %s", dstPath)
+					}
+
 					// Read source file
 					srcPath := filepath.Join(component.Path, file.Src)
 					srcContent, err := reg.ReadFile(srcPath)
@@ -151,7 +159,6 @@ func main() {
 					}
 
 					// Create destination directory if needed
-					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
 					if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
 						return fmt.Errorf("creating destination directory: %w", err)
 					}
@@ -200,6 +207,111 @@ func main() {
 				return nil
 			},
 		},
+		{
+			Name:  "config",
+			Usage: "Manage global configuration",
+			Subcommands: []*cli.Command{
+				{
+					Name:  "set-auth",
+					Usage: "Set authentication for a registry",
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:     "registry",
+							Usage:    "Registry URL (e.g. github.com/networkteam/neos-components)",
+							Required: true,
+						},
+						&cli.StringFlag{
+							Name:  "username",
+							Usage: "Username for HTTP authentication",
+						},
+						&cli.StringFlag{
+							Name:  "password",
+							Usage: "Password or token for HTTP authentication",
+						},
+						&cli.StringFlag{
+							Name:  "private-key",
+							Usage: "Path to private key file for SSH authentication",
+						},
+						&cli.StringFlag{
+							Name:  "key-password",
+							Usage: "Password for the private key (if encrypted)",
+						},
+					},
+					Action: func(c *cli.Context) error {
+						// Load global configuration
+						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
+						if err != nil {
+							return err
+						}
+
+						// Get registry URL
+						registryURL := c.String("registry")
+
+						// Create registry config
+						registryConfig := config.RegistryConfig{}
+
+						// Set HTTP authentication if provided
+						if username := c.String("username"); username != "" {
+							registryConfig.HTTP = &config.HTTPAuth{
+								Username: username,
+								Password: c.String("password"),
+							}
+						}
+
+						// Set SSH authentication if provided
+						if privateKey := c.String("private-key"); privateKey != "" {
+							registryConfig.SSH = &config.SSHAuth{
+								PrivateKeyPath: privateKey,
+								Password:       c.String("key-password"),
+							}
+						}
+
+						// Update configuration
+						globalConfig.Registries[registryURL] = registryConfig
+
+						// Save configuration
+						if err := globalConfig.Save(); err != nil {
+							return fmt.Errorf("saving configuration: %w", err)
+						}
+
+						fmt.Printf("Authentication configured for registry %s\n", registryURL)
+						return nil
+					},
+				},
+				{
+					Name:  "remove-auth",
+					Usage: "Remove authentication for a registry",
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:     "registry",
+							Usage:    "Registry URL",
+							Required: true,
+						},
+					},
+					Action: func(c *cli.Context) error {
+						// Load global configuration
+						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
+						if err != nil {
+							return err
+						}
+
+						// Get registry URL
+						registryURL := c.String("registry")
+
+						// Remove registry configuration
+						delete(globalConfig.Registries, registryURL)
+
+						// Save configuration
+						if err := globalConfig.Save(); err != nil {
+							return fmt.Errorf("saving configuration: %w", err)
+						}
+
+						fmt.Printf("Authentication removed for registry %s\n", registryURL)
+						return nil
+					},
+				},
+			},
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
@@ -215,11 +327,18 @@ func loadProjectAndRegistry(c *cli.Context) (*config.ProjectConfig, *registry.Re
 		return nil, nil, err
 	}
 
-	// Build cache
-	cache, err := registry.NewCache(c.String("cache-dir"))
+	// Load global configuration
+	globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Build cache
+	cache, err := registry.NewCache(c.String("cache-dir"), globalConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	cache.Verbose = c.Bool("verbose")
 
 	// Get registry for the current project
 	reg, err := cache.GetRegistry(projectConfig.Registry, "", projectConfig.ProjectDir)
