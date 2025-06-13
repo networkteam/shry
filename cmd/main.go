@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/mitchellh/go-homedir"
 	"github.com/networkteam/shry/config"
 	"github.com/networkteam/shry/registry"
 	"github.com/networkteam/shry/template"
+	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/urfave/cli/v2"
 )
 
@@ -94,12 +96,8 @@ func main() {
 					return fmt.Errorf("failed to get registry: %w", err)
 				}
 
-				fmt.Printf("Using registry: %s", url)
-				if ref != "" {
-					fmt.Printf(" (ref: %s)", ref)
-				}
-
 				_ = reg
+				// TODO: Create project config and set registry and platform
 
 				return nil
 			},
@@ -139,11 +137,6 @@ func main() {
 				// Add the component
 				fmt.Printf("Adding component %s...\n", componentName)
 				for _, file := range resolvedFiles {
-					// Check for existing files
-					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
-					if _, err := os.Stat(dstPath); err == nil {
-						return fmt.Errorf("destination file already exists: %s", dstPath)
-					}
 
 					// Read source file
 					srcPath := filepath.Join(component.Path, file.Src)
@@ -153,9 +146,98 @@ func main() {
 					}
 
 					// Substitute variables in content
-					content, err := template.Resolve(string(srcContent), projectConfig.Variables)
+					newContent, err := template.Resolve(string(srcContent), projectConfig.Variables)
 					if err != nil {
 						return fmt.Errorf("resolving variables in content: %w", err)
+					}
+
+					// Check for existing files
+					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
+					if _, err := os.Stat(dstPath); err == nil {
+						existingContent, err := os.ReadFile(dstPath)
+						if err != nil {
+							return fmt.Errorf("reading existing file: %w", err)
+						}
+
+						dmp := diffmatchpatch.New()
+						diffs := dmp.DiffMain(string(existingContent), newContent, false)
+
+						// Only show if there are actual changes
+						hasChanges := false
+						for _, diff := range diffs {
+							if diff.Type != diffmatchpatch.DiffEqual {
+								hasChanges = true
+								break
+							}
+						}
+
+						if !hasChanges {
+							fmt.Printf("  Unchanged %s\n", file.Dst)
+							continue
+						}
+
+						var choice string
+						err = huh.NewForm(
+							huh.NewGroup(
+								huh.NewSelect[string]().
+									Title(fmt.Sprintf("File already exists: %s", file.Dst)).
+									Options(
+										huh.NewOption("Skip", "skip"),
+										huh.NewOption("Overwrite", "overwrite"),
+										huh.NewOption("Diff", "diff"),
+									).
+									Value(&choice),
+							),
+						).Run()
+						if err != nil {
+							return err
+						}
+
+						if choice == "skip" {
+							fmt.Printf("  Skipped %s\n", file.Dst)
+							continue
+						}
+						if choice == "diff" {
+							patches := dmp.PatchMake(string(existingContent), diffs)
+
+							fmt.Println("\nDiff:")
+							fmt.Println(dmp.PatchToText(patches))
+
+							var choice string
+							err = huh.NewForm(
+								huh.NewGroup(
+									huh.NewSelect[string]().
+										Title(fmt.Sprintf("File already exists: %s", file.Dst)).
+										Options(
+											huh.NewOption("Skip", "skip"),
+											huh.NewOption("Overwrite", "overwrite"),
+										).
+										Value(&choice),
+								),
+							).Run()
+							if err != nil {
+								return err
+							}
+
+							if choice == "skip" {
+								fmt.Printf("  Skipped %s\n", file.Dst)
+								continue
+							}
+
+							if choice == "overwrite" {
+								// Write destination file
+								if err := os.WriteFile(dstPath, []byte(newContent), 0644); err != nil {
+									return fmt.Errorf("writing destination file: %w", err)
+								}
+
+								fmt.Printf("  Overwrite %s\n", file.Dst)
+
+								continue
+							}
+						}
+
+						// FIXME Check if this is reachable at all
+						return fmt.Errorf("destination file already exists: %s", dstPath)
 					}
 
 					// Create destination directory if needed
@@ -164,7 +246,7 @@ func main() {
 					}
 
 					// Write destination file
-					if err := os.WriteFile(dstPath, []byte(content), 0644); err != nil {
+					if err := os.WriteFile(dstPath, []byte(newContent), 0644); err != nil {
 						return fmt.Errorf("writing destination file: %w", err)
 					}
 
