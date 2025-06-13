@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -133,4 +134,14 @@ func (c *GlobalConfig) GetAuth(registryURL string) (transport.AuthMethod, error)
 	}
 
 	return nil, nil
+}
+
+// RegistryNames returns a sorted list of registry names
+func (c *GlobalConfig) RegistryNames() ([]string, error) {
+	names := make([]string, 0, len(c.Registries))
+	for name := range c.Registries {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names, nil
 }

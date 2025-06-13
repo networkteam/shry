@@ -57,6 +57,11 @@ func main() {
 					Usage:   "Git URL of the component registry (e.g. github.com/networkteam/neos-components[@ref])",
 					Aliases: []string{"r"},
 				},
+				&cli.StringFlag{
+					Name:    "platform",
+					Usage:   "Platform to use for the project",
+					Aliases: []string{"p"},
+				},
 			},
 			Action: func(c *cli.Context) error {
 				// Load global configuration
@@ -85,9 +90,13 @@ func main() {
 						ref = parts[1]
 					}
 				} else {
-					registryNames, err := cache.ListRegistries()
+					registryNames, err := globalConfig.RegistryNames()
 					if err != nil {
 						return fmt.Errorf("listing registries: %w", err)
+					}
+
+					if len(registryNames) == 0 {
+						return fmt.Errorf("no registries configured, you can add new registries with `shry registry add`")
 					}
 
 					registryOpts := make([]huh.Option[string], len(registryNames))
@@ -100,7 +109,10 @@ func main() {
 							Title("Select a registry").
 							Options(registryOpts...).
 							Value(&registryName),
+						huh.NewNote().
+							Description("You can add new registries with \"shry registry add\"."),
 					)).Run()
+
 					if err != nil {
 						return err
 					}
@@ -118,8 +130,52 @@ func main() {
 					return fmt.Errorf("failed to get registry: %w", err)
 				}
 
-				_ = reg
-				// TODO: Create project config and set registry and platform
+				components, err := reg.ScanComponents()
+				if err != nil {
+					return fmt.Errorf("scanning components: %w", err)
+				}
+
+				platform := c.String("platform")
+				if platform != "" {
+					if _, exists := components[platform]; !exists {
+						return fmt.Errorf("platform %s not found in registry", platform)
+					}
+				} else {
+					// Prompt for platform
+					var platforms []string
+					for platform := range components {
+						platforms = append(platforms, platform)
+					}
+
+					err = huh.NewForm(
+						huh.NewGroup(
+							huh.NewSelect[string]().
+								Title("Select a platform").
+								Options(huh.NewOptions(platforms...)...).
+								Value(&platform),
+						),
+					).Run()
+					if err != nil {
+						return err
+					}
+				}
+
+				// Load project config
+				projectConfig, err := config.LoadProjectConfig(cwd)
+				if errors.Is(err, os.ErrNotExist) {
+					projectConfig = &config.ProjectConfig{}
+				} else if err != nil {
+					return fmt.Errorf("loading project config: %w", err)
+				}
+
+				// Update and save project config
+				projectConfig.Registry = registryName
+				projectConfig.Platform = platform
+
+				err = projectConfig.Save()
+				if err != nil {
+					return fmt.Errorf("saving project config: %w", err)
+				}
 
 				return nil
 			},
@@ -622,6 +678,9 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			os.Exit(0)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

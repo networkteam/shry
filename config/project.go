@@ -85,3 +85,17 @@ func LoadProjectConfig(path string) (*ProjectConfig, error) {
 
 	return &config, nil
 }
+
+func (c *ProjectConfig) Save() error {
+	yamlData, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshalling project config: %w", err)
+	}
+
+	err = os.WriteFile(filepath.Join(c.ProjectDir, ProjectConfigFile), yamlData, 0644)
+	if err != nil {
+		return fmt.Errorf("saving project config: %w", err)
+	}
+
+	return nil
+}
