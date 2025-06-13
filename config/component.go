@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-git/go-billy/v5"
+	"github.com/networkteam/shry/template"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,6 +16,8 @@ const (
 
 // Component represents a component configuration
 type Component struct {
+	// Path is the directory path of the component in the filesystem
+	Path string `yaml:"-"`
 	// Name of the component, will be used to reference the component (must be unique within the registry per platform)
 	Name string `yaml:"name"`
 	// Optional title (e.g. image-card vs. "Image Card")
@@ -47,15 +50,18 @@ func LoadComponent(fs billy.Filesystem, path string) (*Component, error) {
 	// Read the component configuration file
 	file, err := fs.Open(filepath.Join(path, ComponentConfigFile))
 	if err != nil {
-		return nil, fmt.Errorf("failed to open component config: %w", err)
+		return nil, fmt.Errorf("opening component config: %w", err)
 	}
 	defer file.Close()
 
 	// Parse the YAML configuration
 	var component Component
 	if err := yaml.NewDecoder(file).Decode(&component); err != nil {
-		return nil, fmt.Errorf("failed to parse component config: %w", err)
+		return nil, fmt.Errorf("parsing component config: %w", err)
 	}
+
+	// Set the component path
+	component.Path = path
 
 	// Validate required fields
 	if component.Name == "" {
@@ -117,4 +123,41 @@ func ScanComponents(fs billy.Filesystem, path string) (map[string]*Component, er
 	}
 
 	return components, nil
+}
+
+// ResolveVariables resolves all variables in the component's files
+func (c *Component) ResolveVariables(variables map[string]any) ([]File, error) {
+	var resolvedFiles []File
+
+	// Collect all variables from file paths and content
+	requiredVars := make(map[string]bool)
+	for _, file := range c.Files {
+		// Check variables in destination path
+		for _, varName := range template.FindVariables(file.Dst) {
+			requiredVars[varName] = true
+		}
+	}
+
+	// Verify all required variables are defined
+	for varName := range requiredVars {
+		if _, exists := variables[varName]; !exists {
+			return nil, fmt.Errorf("required variable %s not defined", varName)
+		}
+	}
+
+	// Resolve variables in each file
+	for _, file := range c.Files {
+		// Resolve destination path
+		dst, err := template.Resolve(file.Dst, variables)
+		if err != nil {
+			return nil, fmt.Errorf("resolving destination path %s: %w", file.Dst, err)
+		}
+
+		resolvedFiles = append(resolvedFiles, File{
+			Src: file.Src,
+			Dst: dst,
+		})
+	}
+
+	return resolvedFiles, nil
 }

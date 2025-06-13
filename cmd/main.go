@@ -9,6 +9,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/networkteam/shry/config"
 	"github.com/networkteam/shry/registry"
+	"github.com/networkteam/shry/template"
 	"github.com/urfave/cli/v2"
 )
 
@@ -80,6 +81,95 @@ func main() {
 				}
 
 				_ = reg
+
+				return nil
+			},
+		},
+		{
+			Name:      "add",
+			Usage:     "Add a component to the project",
+			ArgsUsage: "component-name",
+			Action: func(c *cli.Context) error {
+				// Get component name from args
+				componentName := c.Args().First()
+				if componentName == "" {
+					return fmt.Errorf("component name is required")
+				}
+
+				// Find and load the nearest project config
+				projectConfig, err := config.FindNearestProjectConfig()
+				if err != nil {
+					return err
+				}
+
+				// Create cache
+				cache, err := registry.NewCache(c.String("cache-dir"))
+				if err != nil {
+					return fmt.Errorf("creating cache: %w", err)
+				}
+
+				// Get registry
+				reg, err := cache.GetRegistry(projectConfig.Registry, "", projectConfig.ProjectDir)
+				if err != nil {
+					return fmt.Errorf("getting registry: %w", err)
+				}
+
+				// Scan components
+				components, err := reg.ScanComponents()
+				if err != nil {
+					return fmt.Errorf("scanning components: %w", err)
+				}
+
+				// Lookup the component
+				componentKey := fmt.Sprintf("%s/%s", projectConfig.Platform, componentName)
+				component, exists := components[componentKey]
+				if !exists {
+					return fmt.Errorf("component %s not found for platform %s", componentName, projectConfig.Platform)
+				}
+
+				// Verify variables
+				resolvedFiles, err := component.ResolveVariables(projectConfig.Variables)
+				if err != nil {
+					return err
+				}
+
+				// Check for existing files
+				for _, file := range resolvedFiles {
+					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
+					if _, err := os.Stat(dstPath); err == nil {
+						return fmt.Errorf("destination file already exists: %s", dstPath)
+					}
+				}
+
+				// Add the component
+				fmt.Printf("Adding component %s...\n", componentName)
+				for _, file := range resolvedFiles {
+					// Read source file
+					srcPath := filepath.Join(component.Path, file.Src)
+					srcContent, err := reg.ReadFile(srcPath)
+					if err != nil {
+						return fmt.Errorf("reading source file %s: %w", srcPath, err)
+					}
+
+					// Substitute variables in content
+					content, err := template.Resolve(string(srcContent), projectConfig.Variables)
+					if err != nil {
+						return fmt.Errorf("resolving variables in content: %w", err)
+					}
+
+					// Create destination directory if needed
+					dstPath := filepath.Join(projectConfig.ProjectDir, file.Dst)
+					if err := os.MkdirAll(filepath.Dir(dstPath), 0755); err != nil {
+						return fmt.Errorf("creating destination directory: %w", err)
+					}
+
+					// Write destination file
+					if err := os.WriteFile(dstPath, []byte(content), 0644); err != nil {
+						return fmt.Errorf("writing destination file: %w", err)
+					}
+
+					fmt.Printf("  Added %s\n", file.Dst)
+				}
 
 				return nil
 			},
