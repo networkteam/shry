@@ -40,7 +40,10 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 	// Check if this is a local path
 	if !isGitURL(url) {
 		// Resolve the path relative to the project root
-		absPath := filepath.Join(projectRoot, url)
+		absPath := url
+		if !filepath.IsAbs(absPath) {
+			absPath = filepath.Join(projectRoot, absPath)
+		}
 		absPath, err := filepath.Abs(absPath)
 		if err != nil {
 			return nil, fmt.Errorf("resolving registry path: %w", err)
@@ -141,4 +144,45 @@ func (c *Cache) Clear() error {
 // isGitURL checks if the given URL is a Git URL
 func isGitURL(url string) bool {
 	return !(filepath.IsAbs(url) || filepath.VolumeName(url) != "" || url[0] == '.' || url[0] == '/')
+}
+
+// ListRegistries returns a list of registry names in the cache directory
+func (c *Cache) ListRegistries() ([]string, error) {
+	// Read the cache directory
+	entries, err := os.ReadDir(c.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading cache directory: %w", err)
+	}
+
+	var registries []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Try to get the remote URL
+		repoPath := filepath.Join(c.baseDir, entry.Name())
+		repo, err := git.PlainOpen(repoPath)
+		if err != nil {
+			continue
+		}
+
+		remote, err := repo.Remote("origin")
+		if err != nil {
+			continue
+		}
+
+		// Get the remote URL from the config
+		remoteURL := remote.Config().URLs[0]
+		if strings.HasPrefix(remoteURL, "https://") {
+			remoteURL = remoteURL[8:]
+		}
+
+		registries = append(registries, remoteURL)
+	}
+
+	return registries, nil
 }
