@@ -1,0 +1,36 @@
+# Name of the component, will be used to reference the component (must be unique within the registry per platform)
+name: button
+# Optional title (e.g. image-card vs. "Image Card")
+title: Button
+# Optional description
+description: A button component
+# Platform this component is for (required)
+platform: neos
+# Optional preview image and demo URL
+preview:
+  image: https://placehold.co/600x400
+  demo: http://example.com/shry/button
+
+# Default variables for the component (optional)
+variables: {}
+  # foo: bar
+
+# Files to copy when adding the component to a project
+files:
+  - 
+    # Src file relative to the component directory
+    src: Button.NodeType.yaml
+    # Destination path (filename with variables)
+    dst: "{{basePackagePath}}/NodeTypes/Content/Button.yaml"
+  - 
+    src: Button.Atom.fusion
+    dst: "{{basePackagePath}}/Resources/Private/Components/Atoms/Button.fusion"
+  - 
+    src: Button.Content.fusion
+    dst: "{{basePackagePath}}/Resources/Private/Fusion/Content/Button.fusion"
+  - 
+    src: Button.de.xlf
+    dst: "{{basePackagePath}}/Resources/Private/Translations/de/NodeTypes/Content/Button.xlf"
+  - 
+    src: Button.en.xlf
+    dst: "{{basePackagePath}}/Resources/Private/Translations/en/NodeTypes/Content/Button.xlf"

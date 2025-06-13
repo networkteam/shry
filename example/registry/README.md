@@ -1,0 +1,1 @@
+# An example registry for shry

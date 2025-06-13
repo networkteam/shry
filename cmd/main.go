@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
+	"github.com/networkteam/shry/config"
 	"github.com/networkteam/shry/registry"
 	"github.com/urfave/cli/v2"
 )
@@ -61,8 +62,14 @@ func main() {
 					return fmt.Errorf("failed to create cache: %w", err)
 				}
 
+				// Get current directory as project root
+				cwd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("getting current directory: %w", err)
+				}
+
 				// Get registry
-				reg, err := cache.GetRegistry(url, ref)
+				reg, err := cache.GetRegistry(url, ref, cwd)
 				if err != nil {
 					return fmt.Errorf("failed to get registry: %w", err)
 				}
@@ -73,6 +80,49 @@ func main() {
 				}
 
 				_ = reg
+
+				return nil
+			},
+		},
+		{
+			Name:  "ls",
+			Usage: "List available components from the registry",
+			Action: func(c *cli.Context) error {
+				// Find and load the nearest project config
+				projectConfig, err := config.FindNearestProjectConfig()
+				if err != nil {
+					return err
+				}
+
+				// Create cache
+				cache, err := registry.NewCache(c.String("cache-dir"))
+				if err != nil {
+					return fmt.Errorf("creating cache: %w", err)
+				}
+
+				// Get registry
+				reg, err := cache.GetRegistry(projectConfig.Registry, "", projectConfig.ProjectDir)
+				if err != nil {
+					return fmt.Errorf("getting registry: %w", err)
+				}
+
+				// Scan components
+				components, err := reg.ScanComponents()
+				if err != nil {
+					return fmt.Errorf("scanning components: %w", err)
+				}
+
+				// Print components
+				fmt.Printf("Available components for platform %s:\n\n", projectConfig.Platform)
+				for _, component := range components {
+					if component.Platform == projectConfig.Platform {
+						fmt.Printf("%s\n", component.Name)
+						if component.Description != "" {
+							fmt.Printf("  %s\n", component.Description)
+						}
+						fmt.Println()
+					}
+				}
 
 				return nil
 			},

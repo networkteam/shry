@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+    <file original="" product-name="{{basePackageKey}}" source-language="en" datatype="plaintext">
+        <body>
+            <trans-unit id="ui.label" xml:space="preserve">
+                <source>Button</source>
+            </trans-unit>
+            <trans-unit id="properties.label" xml:space="preserve">
+                <source>Button text</source>
+            </trans-unit>
+            <trans-unit id="properties.label.ui.inline.editorOptions.placeholder" xml:space="preserve">
+                <source>Enter button text ...</source>
+            </trans-unit>
+            <trans-unit id="properties.link" xml:space="preserve">
+                <source>Link to</source>
+            </trans-unit>
+            <trans-unit id="properties.link.ui.help.message" xml:space="preserve">
+                <source>Here you can define hyperlinks to documents, e-mail-addresses, external websites and assets.</source>
+            </trans-unit>
+            <trans-unit id="properties.sectionLink" xml:space="preserve">
+                <source>Section to section</source>
+            </trans-unit>
+            <trans-unit id="properties.sectionLink.ui.help.message" xml:space="preserve">
+                <source>This is an alternative to the field "Link to" above. Here you can define hyperlinks to Sections on any internal document node.</source>
+            </trans-unit>
+            <trans-unit id="properties.targetBlank" xml:space="preserve">
+                <source>Open linktarget in new window</source>
+            </trans-unit>
+            <trans-unit id="properties.align" xml:space="preserve">
+                <source>Alignment</source>
+            </trans-unit>
+            <trans-unit id="properties.align.selectBoxEditor.values." xml:space="preserve">
+                <source>Left</source>
+            </trans-unit>
+            <trans-unit id="properties.align.selectBoxEditor.values.text-center" xml:space="preserve">
+                <source>Center</source>
+            </trans-unit>
+            <trans-unit id="properties.align.selectBoxEditor.values.text-right" xml:space="preserve">
+                <source>Right</source>
+            </trans-unit>
+            <trans-unit id="properties.style" xml:space="preserve">
+                <source>Style</source>
+            </trans-unit>
+            <trans-unit id="properties.style.selectBoxEditor.values." xml:space="preserve">
+                <source>Primary</source>
+            </trans-unit>
+            <trans-unit id="properties.style.selectBoxEditor.values.secondary" xml:space="preserve">
+                <source>Secondary</source>
+            </trans-unit>
+        </body>
+    </file>
+</xliff>

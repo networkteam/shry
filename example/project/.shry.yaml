@@ -1,0 +1,5 @@
+registry: ../registry
+platform: neos
+
+variables:
+  basePackagePath: DistributionPackages/Customer.Base

@@ -1,0 +1,52 @@
+prototype({{basePackageKey}}:Content.Button) < prototype(Neos.Neos:ContentComponent) {
+    sectionNode = ${q(node).property('sectionLink')}
+    sectionPageNode = ${this.sectionNode ? q(this.sectionNode).closest('[instanceof {{basePackageKey}}:Document.Page]').get(0) : null}
+    link = ${q(node).property('link')}
+    targetBlank = ${q(node).property('targetBlank')}
+    align = ${q(node).property('align')}
+    style = ${q(node).property('style')}
+
+    renderer = {{basePackageKey}}:Components.Atoms.Button {
+        label = Neos.Neos:Editable {
+            property = 'label'
+            block = false
+        }
+
+        baseClasses = {{basePackageKey}}:Helper.BaseClasses
+        align = ${props.align}
+        openInNewWindow = ${props.targetBlank ? true : false}
+        link = Neos.Fusion:Case {
+            isSectionLink {
+                condition = ${props.sectionNode ? true : false}
+                renderer = Neos.Neos:NodeUri {
+                    sectionNode = ${props.sectionNode}
+                    section = ${'c' + props.sectionNode.identifier}
+                    node = ${props.sectionPageNode}
+                }
+            }
+            isLink {
+                condition = ${true}
+                renderer = ${props.link}
+                @process.makeUri = Neos.Neos:ConvertUris
+            }
+        }
+        enableLink = ${!node.context.inBackend}
+        style = ${props.style}
+    }
+
+    @cache {
+        mode = 'cached'
+
+        entryIdentifier {
+            node = ${node}
+        }
+
+        entryTags {
+            // Current Node
+            node = ${Neos.Caching.nodeTag(node)}
+            // Linked Documents/Sections
+            pages = ${Neos.Caching.nodeTag(props.sectionPageNode)}
+            sections = ${Neos.Caching.nodeTag(props.sectionNode)}
+        }
+    }
+}

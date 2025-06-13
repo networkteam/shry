@@ -1,0 +1,37 @@
+prototype({{basePackageKey}}:Components.Atoms.Button) < prototype(Neos.Fusion:Component) {
+
+    # properties
+    label = ''
+    baseClasses = null
+    align = null
+    openInNewWindow = false
+    link = ''
+    style = ''
+    enableLink = true
+    target = '_blank'
+    additionalClasses = null
+
+    renderer = afx`
+        <div class={AtomicFusion.classNames('c-button', props.baseClasses, props.align, props.additionalClasses)}>
+            <a class={props.style == 'secondary' ? 'button-secondary' : 'button'}
+                href={props.link}
+                href.@if.enabled={props.enableLink}
+                target={props.target}
+                target.@if.enabled={props.openInNewWindow}
+                rel="noopener noreferrer"
+                rel.@if.enabled={props.openInNewWindow}
+            >
+                <span>{props.label}</span>
+            </a>
+        </div>
+    `
+
+    @styleguide {
+        title = 'Button'
+        description = 'Different button layout examples'
+        props {
+            label = 'Button'
+            link = '#'
+        }
+    }
+}

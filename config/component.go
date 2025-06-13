@@ -1,0 +1,120 @@
+package config
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/go-git/go-billy/v5"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	// ComponentConfigFile is the name of the component configuration file
+	ComponentConfigFile = "shry.yaml"
+)
+
+// Component represents a component configuration
+type Component struct {
+	// Name of the component, will be used to reference the component (must be unique within the registry per platform)
+	Name string `yaml:"name"`
+	// Optional title (e.g. image-card vs. "Image Card")
+	Title string `yaml:"title,omitempty"`
+	// Optional description
+	Description string `yaml:"description,omitempty"`
+	// Platform this component is for (required)
+	Platform string `yaml:"platform"`
+	// Optional preview image and demo URL
+	Preview struct {
+		Image string `yaml:"image,omitempty"`
+		Demo  string `yaml:"demo,omitempty"`
+	} `yaml:"preview,omitempty"`
+	// Default variables for the component (optional)
+	Variables map[string]any `yaml:"variables,omitempty"`
+	// Files to copy when adding the component to a project
+	Files []File `yaml:"files"`
+}
+
+// File represents a file to be copied when adding a component
+type File struct {
+	// Src file relative to the component directory
+	Src string `yaml:"src"`
+	// Destination path (filename with variables)
+	Dst string `yaml:"dst"`
+}
+
+// LoadComponent loads a component configuration from a filesystem
+func LoadComponent(fs billy.Filesystem, path string) (*Component, error) {
+	// Read the component configuration file
+	file, err := fs.Open(filepath.Join(path, ComponentConfigFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open component config: %w", err)
+	}
+	defer file.Close()
+
+	// Parse the YAML configuration
+	var component Component
+	if err := yaml.NewDecoder(file).Decode(&component); err != nil {
+		return nil, fmt.Errorf("failed to parse component config: %w", err)
+	}
+
+	// Validate required fields
+	if component.Name == "" {
+		return nil, fmt.Errorf("component name is required")
+	}
+	if component.Platform == "" {
+		return nil, fmt.Errorf("component platform is required")
+	}
+
+	return &component, nil
+}
+
+// ScanComponents scans a directory recursively for component configurations
+func ScanComponents(fs billy.Filesystem, path string) (map[string]*Component, error) {
+	components := make(map[string]*Component)
+
+	// Helper function to scan a directory
+	var scanDir func(dir string) error
+	scanDir = func(dir string) error {
+		entries, err := fs.ReadDir(dir)
+		if err != nil {
+			return fmt.Errorf("failed to read directory %s: %w", dir, err)
+		}
+
+		for _, entry := range entries {
+			entryPath := filepath.Join(dir, entry.Name())
+
+			if entry.IsDir() {
+				// Check if this directory contains a component configuration
+				if _, err := fs.Stat(filepath.Join(entryPath, ComponentConfigFile)); err == nil {
+					// Load the component configuration
+					component, err := LoadComponent(fs, entryPath)
+					if err != nil {
+						return fmt.Errorf("failed to load component in %s: %w", entryPath, err)
+					}
+
+					// Use platform/name as the key
+					key := fmt.Sprintf("%s/%s", component.Platform, component.Name)
+					if _, exists := components[key]; exists {
+						return fmt.Errorf("duplicate component %s found in %s", key, entryPath)
+					}
+
+					components[key] = component
+				} else {
+					// Recursively scan subdirectories
+					if err := scanDir(entryPath); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		return nil
+	}
+
+	// Start scanning from the given path
+	if err := scanDir(path); err != nil {
+		return nil, err
+	}
+
+	return components, nil
+}
