@@ -40,6 +40,6 @@ func (r *Registry) ReadFile(path string) ([]byte, error) {
 }
 
 // ScanComponents scans the registry for components
-func (r *Registry) ScanComponents() (map[string]*config.Component, error) {
+func (r *Registry) ScanComponents() (map[string]map[string]*config.Component, error) {
 	return config.ScanComponents(r.fs, ".")
 }

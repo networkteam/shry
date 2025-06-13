@@ -14,6 +14,12 @@ const (
 	ComponentConfigFile = "shry.yaml"
 )
 
+// ComponentKey represents a unique key for a component in a registry
+type ComponentKey struct {
+	Platform string
+	Name     string
+}
+
 // Component represents a component configuration
 type Component struct {
 	// Path is the directory path of the component in the filesystem
@@ -75,8 +81,8 @@ func LoadComponent(fs billy.Filesystem, path string) (*Component, error) {
 }
 
 // ScanComponents scans a directory recursively for component configurations
-func ScanComponents(fs billy.Filesystem, path string) (map[string]*Component, error) {
-	components := make(map[string]*Component)
+func ScanComponents(fs billy.Filesystem, path string) (map[string]map[string]*Component, error) {
+	components := make(map[string]map[string]*Component)
 
 	// Helper function to scan a directory
 	var scanDir func(dir string) error
@@ -98,13 +104,17 @@ func ScanComponents(fs billy.Filesystem, path string) (map[string]*Component, er
 						return fmt.Errorf("failed to load component in %s: %w", entryPath, err)
 					}
 
-					// Use platform/name as the key
-					key := fmt.Sprintf("%s/%s", component.Platform, component.Name)
-					if _, exists := components[key]; exists {
-						return fmt.Errorf("duplicate component %s found in %s", key, entryPath)
+					// Initialize platform map if it doesn't exist
+					if _, exists := components[component.Platform]; !exists {
+						components[component.Platform] = make(map[string]*Component)
 					}
 
-					components[key] = component
+					// Check for duplicate component name within the platform
+					if _, exists := components[component.Platform][component.Name]; exists {
+						return fmt.Errorf("duplicate component %s found in platform %s at %s", component.Name, component.Platform, entryPath)
+					}
+
+					components[component.Platform][component.Name] = component
 				} else {
 					// Recursively scan subdirectories
 					if err := scanDir(entryPath); err != nil {

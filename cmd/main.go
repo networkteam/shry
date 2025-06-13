@@ -89,29 +89,18 @@ func main() {
 			Name:      "add",
 			Usage:     "Add a component to the project",
 			ArgsUsage: "component-name",
-			Action: func(c *cli.Context) error {
-				// Get component name from args
+			Args:      true,
+			Before: func(c *cli.Context) error {
 				componentName := c.Args().First()
 				if componentName == "" {
 					return fmt.Errorf("component name is required")
 				}
-
-				// Find and load the nearest project config
-				projectConfig, err := config.FindNearestProjectConfig()
+				return nil
+			},
+			Action: func(c *cli.Context) error {
+				projectConfig, reg, err := loadProjectAndRegistry(c)
 				if err != nil {
 					return err
-				}
-
-				// Create cache
-				cache, err := registry.NewCache(c.String("cache-dir"))
-				if err != nil {
-					return fmt.Errorf("creating cache: %w", err)
-				}
-
-				// Get registry
-				reg, err := cache.GetRegistry(projectConfig.Registry, "", projectConfig.ProjectDir)
-				if err != nil {
-					return fmt.Errorf("getting registry: %w", err)
 				}
 
 				// Scan components
@@ -121,8 +110,12 @@ func main() {
 				}
 
 				// Lookup the component
-				componentKey := fmt.Sprintf("%s/%s", projectConfig.Platform, componentName)
-				component, exists := components[componentKey]
+				componentName := c.Args().First()
+				platformComponents, exists := components[projectConfig.Platform]
+				if !exists {
+					return fmt.Errorf("no components found for platform %s", projectConfig.Platform)
+				}
+				component, exists := platformComponents[componentName]
 				if !exists {
 					return fmt.Errorf("component %s not found for platform %s", componentName, projectConfig.Platform)
 				}
@@ -178,22 +171,9 @@ func main() {
 			Name:  "ls",
 			Usage: "List available components from the registry",
 			Action: func(c *cli.Context) error {
-				// Find and load the nearest project config
-				projectConfig, err := config.FindNearestProjectConfig()
+				projectConfig, reg, err := loadProjectAndRegistry(c)
 				if err != nil {
 					return err
-				}
-
-				// Create cache
-				cache, err := registry.NewCache(c.String("cache-dir"))
-				if err != nil {
-					return fmt.Errorf("creating cache: %w", err)
-				}
-
-				// Get registry
-				reg, err := cache.GetRegistry(projectConfig.Registry, "", projectConfig.ProjectDir)
-				if err != nil {
-					return fmt.Errorf("getting registry: %w", err)
 				}
 
 				// Scan components
@@ -204,14 +184,17 @@ func main() {
 
 				// Print components
 				fmt.Printf("Available components for platform %s:\n\n", projectConfig.Platform)
-				for _, component := range components {
-					if component.Platform == projectConfig.Platform {
-						fmt.Printf("%s\n", component.Name)
-						if component.Description != "" {
-							fmt.Printf("  %s\n", component.Description)
-						}
-						fmt.Println()
+				platformComponents, exists := components[projectConfig.Platform]
+				if !exists {
+					fmt.Printf("No components found for platform %s\n", projectConfig.Platform)
+					return nil
+				}
+				for name, component := range platformComponents {
+					fmt.Printf("%s\n", name)
+					if component.Description != "" {
+						fmt.Printf("  %s\n", component.Description)
 					}
+					fmt.Println()
 				}
 
 				return nil
@@ -223,4 +206,26 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func loadProjectAndRegistry(c *cli.Context) (*config.ProjectConfig, *registry.Registry, error) {
+	// Find and load the nearest project config
+	projectConfig, err := config.FindNearestProjectConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Build cache
+	cache, err := registry.NewCache(c.String("cache-dir"))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Get registry for the current project
+	reg, err := cache.GetRegistry(projectConfig.Registry, "", projectConfig.ProjectDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return projectConfig, reg, nil
 }
