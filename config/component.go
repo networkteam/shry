@@ -32,6 +32,8 @@ type Component struct {
 	Description string `yaml:"description,omitempty"`
 	// Platform this component is for (required)
 	Platform string `yaml:"platform"`
+	// Optional category for grouping components
+	Category string `yaml:"category,omitempty"`
 	// Optional preview image and demo URL
 	Preview struct {
 		Image string `yaml:"image,omitempty"`

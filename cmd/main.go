@@ -174,10 +174,53 @@ func main() {
 					fmt.Printf("No components found for platform %s\n", projectConfig.Platform)
 					return nil
 				}
-				for name, component := range platformComponents {
-					fmt.Printf("%s\n", name)
-					if component.Description != "" {
-						fmt.Printf("  %s\n", component.Description)
+
+				// Group components by category
+				categories := make(map[string][]*config.Component)
+				var uncategorized []*config.Component
+
+				for _, component := range platformComponents {
+					if component.Category == "" {
+						uncategorized = append(uncategorized, component)
+					} else {
+						categories[component.Category] = append(categories[component.Category], component)
+					}
+				}
+
+				// Sort category names
+				var categoryNames []string
+				for category := range categories {
+					categoryNames = append(categoryNames, category)
+				}
+				slices.Sort(categoryNames)
+
+				// Print uncategorized components first
+				if len(uncategorized) > 0 {
+					fmt.Println("Uncategorized:")
+					slices.SortFunc(uncategorized, func(a, b *config.Component) int {
+						return strings.Compare(a.Name, b.Name)
+					})
+					for _, component := range uncategorized {
+						fmt.Printf("  %s\n", component.Name)
+						if component.Description != "" {
+							fmt.Printf("    %s\n", component.Description)
+						}
+					}
+					fmt.Println()
+				}
+
+				// Print categorized components
+				for _, category := range categoryNames {
+					fmt.Printf("%s:\n", category)
+					components := categories[category]
+					slices.SortFunc(components, func(a, b *config.Component) int {
+						return strings.Compare(a.Name, b.Name)
+					})
+					for _, component := range components {
+						fmt.Printf("  %s\n", component.Name)
+						if component.Description != "" {
+							fmt.Printf("    %s\n", component.Description)
+						}
 					}
 					fmt.Println()
 				}
