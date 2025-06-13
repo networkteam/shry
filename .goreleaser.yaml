@@ -46,18 +46,22 @@ changelog:
       - "^test:"
 
 homebrew_casks:
-  - name: shry
-    tap:
+  - # Repository to push the generated files to
+    repository:
       owner: networkteam
-      name: homebrew-tap
-    folder: Casks
-    homepage: "https://github.com/networkteam/shry"
-    description: "A command line tool to add and share components for generic projects and platforms"
+      name: homebrew-tap  # Replace with your actual tap repository name
+    
+    # The cask name (defaults to project name if not specified)
+    name: shry
+
     license: "MIT"
-    install: |
-      bin.install "shry"
-    test: |
-      system "#{bin}/shry", "--version"
+
+    # Your app's homepage
+    homepage: "https://github.com/networkteam/shry"
+    
+    # Your app's description
+    description: "Shry - A tool description here"  # Replace with actual description
+
     hooks:
       post:
         install: |
