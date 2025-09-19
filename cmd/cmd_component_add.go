@@ -11,6 +11,7 @@ import (
 
 	"github.com/networkteam/shry/diff"
 	"github.com/networkteam/shry/template"
+	"github.com/networkteam/shry/ui"
 )
 
 func componentAddCommand() *cli.Command {
@@ -18,14 +19,6 @@ func componentAddCommand() *cli.Command {
 		Name:      "add",
 		Usage:     "Add a component to the project",
 		ArgsUsage: "component-name",
-		Args:      true,
-		Before: func(c *cli.Context) error {
-			componentName := c.Args().First()
-			if componentName == "" {
-				return fmt.Errorf("component name is required")
-			}
-			return nil
-		},
 		Action: func(c *cli.Context) error {
 			projectConfig, reg, err := loadProjectAndRegistry(c)
 			if err != nil {
@@ -33,6 +26,26 @@ func componentAddCommand() *cli.Command {
 			}
 
 			componentName := c.Args().First()
+
+			// If no component name provided, show interactive selector
+			if componentName == "" {
+				// Scan components to show in selector
+				components, err := reg.ScanComponents()
+				if err != nil {
+					return fmt.Errorf("scanning components: %w", err)
+				}
+
+				selectedName, err := ui.ShowComponentSelector(components, projectConfig.Platform)
+				if err != nil {
+					return err
+				}
+
+				if selectedName == "" {
+					return nil
+				}
+
+				componentName = selectedName
+			}
 
 			// Resolve component and verify variables
 			component, err := reg.ResolveComponent(projectConfig.Platform, componentName)
