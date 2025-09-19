@@ -51,27 +51,20 @@ func prettify(hunks []diffmatchpatch.Diff) string {
 	for hunkIdx, hunk := range hunks {
 		lines := strings.Split(hunk.Text, "\n")
 
-		// remove last element if it is empty
+		// remove last element if it is empty due to trailing linebreak
 		if lines[len(lines)-1] == "" {
 			lines = lines[:len(lines)-1]
 		}
 		nLines := len(lines)
 
-		switch hunk.Type {
-		case diffmatchpatch.DiffInsert, diffmatchpatch.DiffDelete:
+		if hunk.Type == diffmatchpatch.DiffEqual && nLines > contextLines*2+1 {
+			lines = compressHunk(lines, hunk.Type, hunkIdx == 0, hunkIdx == len(hunks)-1)
+		} else {
 			for i, line := range lines {
 				lines[i] = renderLine(hunk.Type, line)
 			}
-		case diffmatchpatch.DiffEqual:
-			maxLines := contextLines*2 + 1
-			if nLines > maxLines {
-				lines = compressHunk(lines, hunk.Type, hunkIdx == 0, hunkIdx == len(hunks)-1)
-			} else {
-				for i, line := range lines {
-					lines[i] = renderLine(hunk.Type, line)
-				}
-			}
 		}
+
 		result = append(result, lines...)
 	}
 
