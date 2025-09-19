@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/protocol/packp/sideband"
 	"github.com/go-git/go-git/v5/storage/memory"
+
 	"github.com/networkteam/shry/config"
 )
 
@@ -36,11 +38,11 @@ func NewCache(baseDir string, globalConfig *config.GlobalConfig) (*Cache, error)
 }
 
 // GetRegistry returns a Registry instance for the given registry URL and reference
-func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Registry, error) {
+func (c *Cache) GetRegistry(location string, ref string, projectRoot string) (*Registry, error) {
 	// Check if this is a local path
-	if !isGitURL(url) {
+	if !isGitURL(location) {
 		// Resolve the path relative to the project root
-		absPath := url
+		absPath := location
 		if !filepath.IsAbs(absPath) {
 			absPath = filepath.Join(projectRoot, absPath)
 		}
@@ -51,16 +53,16 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 
 		// Create a filesystem for the local path
 		fs := osfs.New(absPath)
-		return &Registry{fs: fs}, nil
+		return newRegistry(absPath, nil, fs), nil
 	}
 
 	// Handle Git repository
 	// Create a safe directory name from the URL
-	dirName := strings.ReplaceAll(url, "/", "_")
+	dirName := strings.ReplaceAll(location, "/", "_")
 	repoPath := filepath.Join(c.baseDir, dirName)
 
 	// Get authentication method
-	auth, err := c.globalConfig.GetAuth(url)
+	auth, err := c.globalConfig.GetAuth(location)
 	if err != nil {
 		return nil, fmt.Errorf("getting auth: %w", err)
 	}
@@ -84,18 +86,18 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 			Progress: progress,
 			RefSpecs: []gitconfig.RefSpec{"+refs/heads/*:refs/heads/*"},
 			Prune:    true,
-		}); err != nil && err != git.NoErrAlreadyUpToDate {
+		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return nil, fmt.Errorf("failed to fetch latest changes: %w", err)
 		}
-		slog.Debug("Updated cache repository", "url", url, "ref", ref)
-	} else if err == git.ErrRepositoryNotExists {
+		slog.Debug("Updated cache repository", "url", location, "ref", ref)
+	} else if errors.Is(err, git.ErrRepositoryNotExists) {
 		var progress sideband.Progress
 		if c.Verbose {
 			progress = os.Stderr
 		}
 		// Clone the repository as bare
 		bareRepo, err = git.PlainClone(repoPath, true, &git.CloneOptions{
-			URL:      fmt.Sprintf("https://%s", url),
+			URL:      fmt.Sprintf("https://%s", location),
 			Progress: progress,
 			Auth:     auth,
 		})
@@ -131,9 +133,9 @@ func (c *Cache) GetRegistry(url string, ref string, projectRoot string) (*Regist
 		return nil, fmt.Errorf("failed to clone repository: %w", err)
 	}
 
-	slog.Debug("Cloned cache repository to in-memory worktree", "url", url, "ref", ref, "referenceName", referenceName)
+	slog.Debug("Cloned cache repository to in-memory worktree", "url", location, "ref", ref, "referenceName", referenceName)
 
-	return newRegistry(repo, fs), nil
+	return newRegistry(ref, repo, fs), nil
 }
 
 // Clear removes all cached repositories

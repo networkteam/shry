@@ -52,7 +52,7 @@ This will:
 
 #### Add a Registry
 ```bash
-shry registry add <registry-name>
+shry registry add <registry-location>
 ```
 This will:
 - Add a new registry to your configuration
@@ -67,14 +67,14 @@ Shows all configured registries with their component counts.
 
 #### Remove a Registry
 ```bash
-shry registry remove --name <registry-name>
+shry registry remove <registry-location>
 ```
 
 ### Authentication
 
 #### Set Authentication
 ```bash
-shry config set-auth --registry <registry-url>
+shry config set-auth <registry-url>
 ```
 Options:
 - `--username`: Username for HTTP authentication
@@ -84,7 +84,7 @@ Options:
 
 #### Remove Authentication
 ```bash
-shry config remove-auth --registry <registry-url>
+shry config remove-auth <registry-url>
 ```
 
 ## Configuration

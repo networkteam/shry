@@ -11,11 +11,12 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/mitchellh/go-homedir"
+	"github.com/sergi/go-diff/diffmatchpatch"
+	"github.com/urfave/cli/v2"
+
 	"github.com/networkteam/shry/config"
 	"github.com/networkteam/shry/registry"
 	"github.com/networkteam/shry/template"
-	"github.com/sergi/go-diff/diffmatchpatch"
-	"github.com/urfave/cli/v2"
 )
 
 func main() {
@@ -77,38 +78,38 @@ func main() {
 				}
 				cache.Verbose = c.Bool("verbose")
 
-				var registryName string
+				var registryLocation string
 				var ref string
 
 				registrySpec := c.String("registry")
 				if registrySpec != "" {
 					// Split registry URL and reference if present
 					parts := strings.Split(registrySpec, "@")
-					registryName = parts[0]
+					registryLocation = parts[0]
 					ref = ""
 					if len(parts) > 1 {
 						ref = parts[1]
 					}
 				} else {
-					registryNames, err := globalConfig.RegistryNames()
+					registryLocations, err := globalConfig.RegistryLocations()
 					if err != nil {
 						return fmt.Errorf("listing registries: %w", err)
 					}
 
-					if len(registryNames) == 0 {
-						return fmt.Errorf("no registries configured, you can add new registries with `shry registry add`")
+					if len(registryLocations) == 0 {
+						return fmt.Errorf("no registries configured, you can add new registries with `shry registry add <registry-location>`")
 					}
 
-					registryOpts := make([]huh.Option[string], len(registryNames))
-					for i, name := range registryNames {
-						registryOpts[i] = huh.NewOption(name, name)
+					registryOpts := make([]huh.Option[string], len(registryLocations))
+					for i, location := range registryLocations {
+						registryOpts[i] = huh.NewOption(location, location)
 					}
 
 					err = huh.NewForm(huh.NewGroup(
 						huh.NewSelect[string]().
 							Title("Select a registry").
 							Options(registryOpts...).
-							Value(&registryName),
+							Value(&registryLocation),
 						huh.NewNote().
 							Description("You can add new registries with \"shry registry add\"."),
 					)).Run()
@@ -125,7 +126,7 @@ func main() {
 				}
 
 				// Get registry
-				reg, err := cache.GetRegistry(registryName, ref, cwd)
+				reg, err := cache.GetRegistry(registryLocation, ref, cwd)
 				if err != nil {
 					return fmt.Errorf("failed to get registry: %w", err)
 				}
@@ -169,7 +170,7 @@ func main() {
 				}
 
 				// Update and save project config
-				projectConfig.Registry = registryName
+				projectConfig.Registry = registryLocation
 				projectConfig.Platform = platform
 
 				err = projectConfig.Save()
@@ -289,14 +290,10 @@ func main() {
 			Usage: "Manage global configuration",
 			Subcommands: []*cli.Command{
 				{
-					Name:  "set-auth",
-					Usage: "Set authentication for a registry",
+					Name:      "set-auth",
+					Usage:     "Set authentication for a registry",
+					ArgsUsage: "registry-url",
 					Flags: []cli.Flag{
-						&cli.StringFlag{
-							Name:     "registry",
-							Usage:    "Registry URL (e.g. github.com/networkteam/neos-components)",
-							Required: true,
-						},
 						&cli.StringFlag{
 							Name:  "username",
 							Usage: "Username for HTTP authentication",
@@ -315,14 +312,17 @@ func main() {
 						},
 					},
 					Action: func(c *cli.Context) error {
+						// Get registry URL
+						registryURL := c.Args().First()
+						if registryURL == "" {
+							return fmt.Errorf("registry URL is required")
+						}
+
 						// Load global configuration
 						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
 						if err != nil {
 							return err
 						}
-
-						// Get registry URL
-						registryURL := c.String("registry")
 
 						// Create registry config
 						registryConfig := config.RegistryConfig{}
@@ -356,24 +356,21 @@ func main() {
 					},
 				},
 				{
-					Name:  "remove-auth",
-					Usage: "Remove authentication for a registry",
-					Flags: []cli.Flag{
-						&cli.StringFlag{
-							Name:     "registry",
-							Usage:    "Registry URL",
-							Required: true,
-						},
-					},
+					Name:      "remove-auth",
+					Usage:     "Remove authentication for a registry",
+					ArgsUsage: "registry-url",
 					Action: func(c *cli.Context) error {
+						// Get registry URL
+						registryURL := c.Args().First()
+						if registryURL == "" {
+							return fmt.Errorf("registry URL is required")
+						}
+
 						// Load global configuration
 						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
 						if err != nil {
 							return err
 						}
-
-						// Get registry URL
-						registryURL := c.String("registry")
 
 						// Remove registry configuration
 						delete(globalConfig.Registries, registryURL)
@@ -396,7 +393,7 @@ func main() {
 				{
 					Name:      "add",
 					Usage:     "Add a new registry",
-					ArgsUsage: "registry-name",
+					ArgsUsage: "registry-location",
 					Args:      true,
 					Flags: []cli.Flag{
 						&cli.StringFlag{
@@ -418,8 +415,8 @@ func main() {
 					},
 					Action: func(c *cli.Context) error {
 						// Get registry name
-						registryName := c.Args().First()
-						if registryName == "" {
+						registryLocation := c.Args().First()
+						if registryLocation == "" {
 							return fmt.Errorf("registry name is required")
 						}
 
@@ -443,7 +440,7 @@ func main() {
 						}
 
 						// Try to get the registry to verify it's accessible
-						reg, err := cache.GetRegistry(registryName, "", cwd)
+						reg, err := cache.GetRegistry(registryLocation, "", cwd)
 						if err != nil {
 							// Check if authentication is required
 							if errors.Is(err, transport.ErrAuthenticationRequired) {
@@ -543,10 +540,10 @@ func main() {
 								if globalConfig.Registries == nil {
 									globalConfig.Registries = make(map[string]config.RegistryConfig)
 								}
-								globalConfig.Registries[registryName] = registryConfig
+								globalConfig.Registries[reg.Name] = registryConfig
 
 								// Try again with authentication
-								reg, err = cache.GetRegistry(registryName, "", cwd)
+								reg, err = cache.GetRegistry(registryLocation, "", cwd)
 								if err != nil {
 									return fmt.Errorf("failed to access registry with authentication: %w", err)
 								}
@@ -559,8 +556,8 @@ func main() {
 						if globalConfig.Registries == nil {
 							globalConfig.Registries = make(map[string]config.RegistryConfig)
 						}
-						if _, exists := globalConfig.Registries[registryName]; !exists {
-							globalConfig.Registries[registryName] = config.RegistryConfig{}
+						if _, exists := globalConfig.Registries[reg.Name]; !exists {
+							globalConfig.Registries[reg.Name] = config.RegistryConfig{}
 						}
 
 						// Verify we can scan components
@@ -574,7 +571,7 @@ func main() {
 						}
 
 						// Print summary
-						fmt.Printf("Added registry %s\n", registryName)
+						fmt.Printf("Added registry %s\n", reg.Name)
 						fmt.Printf("Found components for platforms:\n")
 						for platform := range components {
 							fmt.Printf("  - %s (%d components)\n", platform, len(components[platform]))
@@ -607,19 +604,23 @@ func main() {
 							return fmt.Errorf("getting current directory: %w", err)
 						}
 
+						if len(globalConfig.Registries) == 0 {
+							return fmt.Errorf("no registries configured, you can add new registries with `shry registry add <registry-name>`")
+						}
+
 						fmt.Println("Configured registries:")
-						for name := range globalConfig.Registries {
+						for location := range globalConfig.Registries {
 							// Try to get the registry to verify it's accessible
-							reg, err := cache.GetRegistry(name, "", cwd)
+							reg, err := cache.GetRegistry(location, "", cwd)
 							if err != nil {
-								fmt.Printf("  %s (error: %v)\n", name, err)
+								fmt.Printf("  %s (error: %v)\n", location, err)
 								continue
 							}
 
 							// Get component count
 							components, err := reg.ScanComponents()
 							if err != nil {
-								fmt.Printf("  %s (error scanning: %v)\n", name, err)
+								fmt.Printf("  %s (error scanning: %v)\n", location, err)
 								continue
 							}
 
@@ -629,47 +630,44 @@ func main() {
 								total += len(platformComponents)
 							}
 
-							fmt.Printf("  %s (%d components across %d platforms)\n", name, total, len(components))
+							fmt.Printf("  %s (%d components across %d platforms)\n", location, total, len(components))
 						}
 
 						return nil
 					},
 				},
 				{
-					Name:    "remove",
-					Aliases: []string{"rm"},
-					Usage:   "Remove a registry",
-					Flags: []cli.Flag{
-						&cli.StringFlag{
-							Name:     "name",
-							Usage:    "Registry name",
-							Required: true,
-						},
-					},
+					Name:      "remove",
+					Aliases:   []string{"rm"},
+					Usage:     "Remove a registry",
+					ArgsUsage: "registry-location",
 					Action: func(c *cli.Context) error {
+						// Get registry location
+						registryLocation := c.Args().First()
+						if registryLocation == "" {
+							return fmt.Errorf("registry location is required")
+						}
+
 						// Load global configuration
 						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
 						if err != nil {
 							return err
 						}
 
-						// Get registry name
-						registryName := c.String("name")
-
 						// Check if registry exists
-						if _, exists := globalConfig.Registries[registryName]; !exists {
-							return fmt.Errorf("registry %s not found", registryName)
+						if _, exists := globalConfig.Registries[registryLocation]; !exists {
+							return fmt.Errorf("registry %s not found", registryLocation)
 						}
 
 						// Remove registry
-						delete(globalConfig.Registries, registryName)
+						delete(globalConfig.Registries, registryLocation)
 
 						// Save configuration
 						if err := globalConfig.Save(); err != nil {
 							return fmt.Errorf("saving configuration: %w", err)
 						}
 
-						fmt.Printf("Removed registry %s\n", registryName)
+						fmt.Printf("Removed registry %s\n", registryLocation)
 						return nil
 					},
 				},

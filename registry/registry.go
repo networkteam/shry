@@ -6,18 +6,21 @@ import (
 
 	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-git/v5"
+
 	"github.com/networkteam/shry/config"
 )
 
 // Registry represents a component registry that can be either a Git repository or a local directory
 type Registry struct {
+	Name string
 	repo *git.Repository // nil for local directories
 	fs   billy.Filesystem
 }
 
 // newRegistry creates a new Registry instance
-func newRegistry(repo *git.Repository, fs billy.Filesystem) *Registry {
+func newRegistry(name string, repo *git.Repository, fs billy.Filesystem) *Registry {
 	return &Registry{
+		Name: name,
 		repo: repo,
 		fs:   fs,
 	}

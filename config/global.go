@@ -136,12 +136,12 @@ func (c *GlobalConfig) GetAuth(registryURL string) (transport.AuthMethod, error)
 	return nil, nil
 }
 
-// RegistryNames returns a sorted list of registry names
-func (c *GlobalConfig) RegistryNames() ([]string, error) {
-	names := make([]string, 0, len(c.Registries))
-	for name := range c.Registries {
-		names = append(names, name)
+// RegistryLocations returns a sorted list of registry locations
+func (c *GlobalConfig) RegistryLocations() ([]string, error) {
+	locations := make([]string, 0, len(c.Registries))
+	for location := range c.Registries {
+		locations = append(locations, location)
 	}
-	slices.Sort(names)
-	return names, nil
+	slices.Sort(locations)
+	return locations, nil
 }

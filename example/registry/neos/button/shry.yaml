@@ -6,6 +6,8 @@ title: Button
 description: A button component
 # Platform this component is for (required)
 platform: neos
+# Optional category of the component
+category: Atoms
 # Optional preview image and demo URL
 preview:
   image: https://placehold.co/600x400
