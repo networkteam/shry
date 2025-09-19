@@ -636,41 +636,7 @@ func main() {
 						return nil
 					},
 				},
-				{
-					Name:      "remove",
-					Aliases:   []string{"rm"},
-					Usage:     "Remove a registry",
-					ArgsUsage: "registry-location",
-					Action: func(c *cli.Context) error {
-						// Get registry location
-						registryLocation := c.Args().First()
-						if registryLocation == "" {
-							return fmt.Errorf("registry location is required")
-						}
-
-						// Load global configuration
-						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
-						if err != nil {
-							return err
-						}
-
-						// Check if registry exists
-						if _, exists := globalConfig.Registries[registryLocation]; !exists {
-							return fmt.Errorf("registry %s not found", registryLocation)
-						}
-
-						// Remove registry
-						delete(globalConfig.Registries, registryLocation)
-
-						// Save configuration
-						if err := globalConfig.Save(); err != nil {
-							return fmt.Errorf("saving configuration: %w", err)
-						}
-
-						fmt.Printf("Removed registry %s\n", registryLocation)
-						return nil
-					},
-				},
+				registryDeleteCommand(),
 			},
 		},
 	}
