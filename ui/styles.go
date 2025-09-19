@@ -4,12 +4,13 @@ import "github.com/charmbracelet/lipgloss"
 
 // Shared color palette
 var (
-	PrimaryColor   = lipgloss.Color("#7a458f")
-	SecondaryColor = lipgloss.Color("#ffffff")
-	BorderColor    = lipgloss.Color("#7a458f")
-	ErrorColor     = lipgloss.Color("1")
-	SuccessColor   = lipgloss.Color("2")
-	WarningColor   = lipgloss.Color("3")
+	PrimaryColor         = lipgloss.Color("#7a458f")
+	PrimaryDisabledColor = lipgloss.Color("#41254C")
+	SecondaryColor       = lipgloss.Color("#ffffff")
+	BorderColor          = lipgloss.Color("#7a458f")
+	ErrorColor           = lipgloss.Color("1")
+	SuccessColor         = lipgloss.Color("2")
+	WarningColor         = lipgloss.Color("3")
 )
 
 // Shared styles for consistent UI

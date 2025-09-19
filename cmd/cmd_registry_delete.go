@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
 	"github.com/urfave/cli/v2"
 
 	"github.com/networkteam/shry/config"
@@ -131,20 +130,17 @@ func registryDeleteCommand() *cli.Command {
 			}
 
 			// Confirmation dialog
-			var confirm bool
-			err = huh.NewForm(
-				huh.NewGroup(
-					huh.NewConfirm().
-						Title(fmt.Sprintf("Are you sure you want to remove registry '%s'?", registryLocation)).
-						Description("This action cannot be undone.").
-						Value(&confirm),
-				),
-			).Run()
+			confirmOptions := ui.NewConfirmation(fmt.Sprintf("Are you sure you want to remove registry '%s'?", registryLocation)).
+				WithDescription("This action cannot be undone.").
+				WithYesText("Remove").
+				WithNoText("Cancel")
+
+			confirmed, err := ui.ShowConfirmation(confirmOptions)
 			if err != nil {
 				return err
 			}
 
-			if !confirm {
+			if !confirmed {
 				fmt.Println("Registry removal cancelled.")
 				return nil
 			}
