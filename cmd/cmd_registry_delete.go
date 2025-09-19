@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,21 +9,14 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/networkteam/shry/config"
-	"github.com/networkteam/shry/registry"
+	"github.com/networkteam/shry/ui"
 )
 
 type registryTableModel struct {
-	registries []registryInfo
+	registries []ui.RegistryInfo
 	cursor     int
 	selected   bool
 	cancelled  bool
-}
-
-type registryInfo struct {
-	location   string
-	status     string
-	platforms  int
-	components int
 }
 
 func (m registryTableModel) Init() tea.Cmd {
@@ -58,106 +49,28 @@ func (m registryTableModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m registryTableModel) View() string {
 	var s strings.Builder
 
-	// Title
-	s.WriteString(config.TitleStyle.Render("Select a registry to remove:"))
+	// Format table with interactive row styling
+	tableOptions := ui.TableOptions{
+		Title:        "Select a registry to remove:",
+		IncludeTitle: true,
+		RowStyleFunc: ui.InteractiveRowStyleFunc(m.cursor),
+	}
+
+	// Use shared table formatting but customize for interactive view
+	tableOutput := ui.FormatRegistryTable(m.registries, tableOptions)
+	s.WriteString(tableOutput)
 	s.WriteString("\n")
-
-	// Calculate dynamic registry column width
-	maxRegistryWidth := len("Registry")
-	for _, reg := range m.registries {
-		if len(reg.location) > maxRegistryWidth {
-			maxRegistryWidth = len(reg.location)
-		}
-	}
-	// Cap the registry column width at reasonable limit
-	if maxRegistryWidth > 50 {
-		maxRegistryWidth = 50
-	}
-
-	// Build table content
-	var tableContent strings.Builder
-
-	// Header row
-	headerRow := fmt.Sprintf("%-*s │ %-10s │ %-10s │ %-12s",
-		maxRegistryWidth, "Registry", "Status", "Platforms", "Components")
-	tableContent.WriteString(config.HeaderStyle.Render(headerRow))
-	tableContent.WriteString("\n")
-
-	// Data rows
-	for i, reg := range m.registries {
-		rowStyle := config.NormalStyle
-		if m.cursor == i {
-			rowStyle = config.SelectedStyle
-		}
-
-		// Truncate registry location if too long
-		registryDisplay := reg.location
-		if len(registryDisplay) > maxRegistryWidth {
-			registryDisplay = "..." + registryDisplay[len(registryDisplay)-(maxRegistryWidth-3):]
-		}
-
-		row := fmt.Sprintf("%-*s │ %-10s │ %-10d │ %-12d",
-			maxRegistryWidth, registryDisplay, reg.status, reg.platforms, reg.components)
-		tableContent.WriteString(rowStyle.Render(row))
-		tableContent.WriteString("\n")
-	}
-
-	// Apply base style to entire table
-	s.WriteString(config.BaseStyle.Render(tableContent.String()))
-	s.WriteString("\n")
-	s.WriteString(config.HelpStyle.Render("↑/↓: navigate • enter/space: select • q/esc: cancel"))
+	s.WriteString(ui.HelpStyle.Render("↑/↓: navigate • enter/space: select • q/esc: cancel"))
 
 	return s.String()
 }
 
 func selectRegistryInteractively(c *cli.Context, globalConfig *config.GlobalConfig) (string, error) {
-	// Create cache to get registry information
-	cache, err := registry.NewCache(c.String("cache-dir"), globalConfig)
+	// Collect registry information using shared function
+	registries, err := ui.CollectRegistryTableInfo(c, globalConfig)
 	if err != nil {
-		return "", fmt.Errorf("failed to create cache: %w", err)
+		return "", err
 	}
-	cache.Verbose = c.Bool("verbose")
-
-	// Get current directory for resolving relative paths
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("getting current directory: %w", err)
-	}
-
-	// Build registry info
-	var registries []registryInfo
-	for location := range globalConfig.Registries {
-		info := registryInfo{
-			location:   location,
-			status:     "Unknown",
-			platforms:  0,
-			components: 0,
-		}
-
-		// Try to get registry info
-		reg, err := cache.GetRegistry(location, "", cwd)
-		if err != nil {
-			info.status = "Error"
-		} else {
-			info.status = "OK"
-			components, err := reg.ScanComponents()
-			if err != nil {
-				info.status = "Error"
-			} else {
-				info.platforms = len(components)
-				for _, platformComponents := range components {
-					info.components += len(platformComponents)
-				}
-			}
-		}
-
-		registries = append(registries, info)
-	}
-
-	// Sort registries by location for consistent ordering
-	sort.Slice(registries, func(i, j int) bool {
-		return registries[i].location < registries[j].location
-	})
 
 	// Create and run the table model
 	model := registryTableModel{
@@ -178,7 +91,7 @@ func selectRegistryInteractively(c *cli.Context, globalConfig *config.GlobalConf
 		return "", nil
 	}
 
-	return result.registries[result.cursor].location, nil
+	return result.registries[result.cursor].Location, nil
 }
 
 func registryDeleteCommand() *cli.Command {
