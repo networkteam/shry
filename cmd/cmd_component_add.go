@@ -109,6 +109,7 @@ func componentAddCommand() *cli.Command {
 						fmt.Printf("  Skipped %s\n", file.Dst)
 						continue
 					}
+
 					if choice == "diff" {
 						lineText1, lineText2, lineArray := dmp.DiffLinesToChars(string(existingContent), newContent)
 						diffs := dmp.DiffMain(lineText1, lineText2, false)
@@ -140,6 +141,11 @@ func componentAddCommand() *cli.Command {
 
 							fmt.Printf("  Overwrite %s\n", file.Dst)
 
+							continue
+						}
+
+						if choice == "skip" {
+							fmt.Printf("  Skipped %s\n", file.Dst)
 							continue
 						}
 					}
