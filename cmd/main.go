@@ -580,62 +580,7 @@ func main() {
 						return nil
 					},
 				},
-				{
-					Name:    "list",
-					Aliases: []string{"ls"},
-					Usage:   "List configured registries",
-					Action: func(c *cli.Context) error {
-						// Load global configuration
-						globalConfig, err := config.LoadGlobalConfig(c.String("global-config"))
-						if err != nil {
-							return err
-						}
-
-						// Create cache
-						cache, err := registry.NewCache(c.String("cache-dir"), globalConfig)
-						if err != nil {
-							return fmt.Errorf("failed to create cache: %w", err)
-						}
-						cache.Verbose = c.Bool("verbose")
-
-						// Get current directory for resolving relative paths
-						cwd, err := os.Getwd()
-						if err != nil {
-							return fmt.Errorf("getting current directory: %w", err)
-						}
-
-						if len(globalConfig.Registries) == 0 {
-							return fmt.Errorf("no registries configured, you can add new registries with `shry registry add <registry-name>`")
-						}
-
-						fmt.Println("Configured registries:")
-						for location := range globalConfig.Registries {
-							// Try to get the registry to verify it's accessible
-							reg, err := cache.GetRegistry(location, "", cwd)
-							if err != nil {
-								fmt.Printf("  %s (error: %v)\n", location, err)
-								continue
-							}
-
-							// Get component count
-							components, err := reg.ScanComponents()
-							if err != nil {
-								fmt.Printf("  %s (error scanning: %v)\n", location, err)
-								continue
-							}
-
-							// Count total components
-							total := 0
-							for _, platformComponents := range components {
-								total += len(platformComponents)
-							}
-
-							fmt.Printf("  %s (%d components across %d platforms)\n", location, total, len(components))
-						}
-
-						return nil
-					},
-				},
+				registryListCommand(),
 				registryDeleteCommand(),
 			},
 		},
