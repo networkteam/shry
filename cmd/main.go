@@ -525,6 +525,8 @@ func main() {
 							return fmt.Errorf("getting current directory: %w", err)
 						}
 
+						registryName := registryLocation
+
 						// Try to get the registry to verify it's accessible
 						reg, err := cache.GetRegistry(registryLocation, "", cwd)
 						if err != nil {
@@ -626,24 +628,26 @@ func main() {
 								if globalConfig.Registries == nil {
 									globalConfig.Registries = make(map[string]config.RegistryConfig)
 								}
-								globalConfig.Registries[reg.Name] = registryConfig
+								globalConfig.Registries[registryName] = registryConfig
 
 								// Try again with authentication
-								reg, err = cache.GetRegistry(registryLocation, "", cwd)
+								reg, err = cache.GetRegistry(registryName, "", cwd)
 								if err != nil {
 									return fmt.Errorf("failed to access registry with authentication: %w", err)
 								}
 							} else {
 								return fmt.Errorf("failed to access registry: %w", err)
 							}
+						} else {
+							registryName = reg.Name
 						}
 
 						// Add registry to global config if not already added
 						if globalConfig.Registries == nil {
 							globalConfig.Registries = make(map[string]config.RegistryConfig)
 						}
-						if _, exists := globalConfig.Registries[reg.Name]; !exists {
-							globalConfig.Registries[reg.Name] = config.RegistryConfig{}
+						if _, exists := globalConfig.Registries[registryName]; !exists {
+							globalConfig.Registries[registryName] = config.RegistryConfig{}
 						}
 
 						// Verify we can scan components
@@ -657,7 +661,7 @@ func main() {
 						}
 
 						// Print summary
-						fmt.Printf("Added registry %s\n", reg.Name)
+						fmt.Printf("Added registry %s\n", registryName)
 						fmt.Printf("Found components for platforms:\n")
 						for platform := range components {
 							fmt.Printf("  - %s (%d components)\n", platform, len(components[platform]))

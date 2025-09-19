@@ -145,5 +145,8 @@ func (c *Cache) Clear() error {
 
 // isGitURL checks if the given URL is a Git URL
 func isGitURL(url string) bool {
+	if url == "" {
+		return false
+	}
 	return !(filepath.IsAbs(url) || filepath.VolumeName(url) != "" || url[0] == '.' || url[0] == '/')
 }
