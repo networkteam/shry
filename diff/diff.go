@@ -5,12 +5,17 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/networkteam/shry/ui"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 func PrettyPrint(diffs []diffmatchpatch.Diff) {
-	// TODO use bubbletea view
-	fmt.Println(prettify(diffs))
+	content := prettify(diffs)
+	err := ShowDiff(content)
+	if err != nil {
+		fmt.Printf("Error displaying diff: %v\n", err)
+		fmt.Println(content)
+	}
 }
 
 const contextLines = 2
@@ -24,9 +29,9 @@ const (
 )
 
 var (
-	insertLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	deleteLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	omitLineStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+	insertLineStyle = lipgloss.NewStyle().Foreground(ui.SuccessColor)
+	deleteLineStyle = lipgloss.NewStyle().Foreground(ui.ErrorColor)
+	omitLineStyle   = lipgloss.NewStyle().Foreground(ui.CyanColor)
 )
 
 func formatLine(opRune operationRune, text string) string {

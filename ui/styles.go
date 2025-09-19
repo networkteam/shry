@@ -11,6 +11,7 @@ var (
 	ErrorColor           = lipgloss.Color("1")
 	SuccessColor         = lipgloss.Color("2")
 	WarningColor         = lipgloss.Color("3")
+	CyanColor            = lipgloss.Color("6")
 )
 
 // Shared styles for consistent UI
